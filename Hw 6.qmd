@@ -1,0 +1,166 @@
+---
+title: "Hw 6"
+format: html
+editor: visual
+---
+
+## Homework 6: Text data management
+
+Link to Github: https://github.com/ashlynjoshy/plan372-hw6
+
+Street trees provide a host of benefits to urban environments.They create shade, improve air quality, slow traffic on neighborhood streets, and much more. The City of Raleigh wishes to update its development standards to make recommendations and guide investment in street trees. One of the key questions they have is about what types of trees work well to maximize shade, and has engaged you as a consultant to study this question.
+
+They have recommended you use data from US Department of Agriculture’s Urban Tree Database. This dataset contains data on over 14,000 urban trees in the US. Download the “data publication” from that link; within it you will find several data files. For this study, use the “Raw Tree Data,” which contains individual records for each tree studied.
+
+Upload a rendered Quarto document with answers to the questions below on Canvas. Also upload your Quarto code to Github, and include the link to your repository in the document. If your repository is private, add me as a collaborator (my Github username is mattwigway).
+
+```{r}
+library(tidyverse)
+library(ggthemes)
+
+data = read_csv("TS3_Raw_tree_data.csv")
+data
+```
+
+## Question 1: Sample sizes by state
+The dataset does not contain a state column, but does contain a city column which contains both city and state information (e.g. Charlotte, NC). Use a regular expression to create separate columns for the city name and state abbreviation, and use these columns to answer the following questions.
+
+```{r}
+data[,c("city", "state")] = str_match(data$City, "^([:alpha:]+), ([:alpha:]+)$")[,2:3]
+head(data)
+```
+
+How many records are there in each state (include a table or bar plot)? [4 points]
+```{r}
+#Groups data by state, counts the number of records in each state
+state_count = data |>
+  group_by(state) |>
+  summarize(COUNT=length(state)) |>
+  ungroup()
+
+#Displays table with number of records for each state
+state_count
+```
+
+## Question 2: Cities in NC/SC
+Since different trees grow differently in different parts of the country, the city wants you to only use data from North and South Carolina. Filter the dataset to only these states, and use that filtered dataset for all remaining questions.
+```{r}
+#Filters dataset to only include records from NC and SC
+carolina = data |>
+  filter(state == c("NC", "SC"))
+
+carolina
+unique(carolina$state)
+```
+
+What cities did they collect data from in North and South Carolina? [3 points]
+They collected data from Charleston and Charlotte. 
+```{r}
+unique(carolina$city)
+```
+
+
+## Question 3: Genera and species
+The city wishes to know what types of trees in the dataset have the largest crown (i.e. their branches and leaves cover the most area, maximizing shade). The crown size is in the column AvgCdia (m), in meters.
+
+The data contain the scientific names of the species of each surveyed tree. Scientific names use binomial nomenclature, where the scientific names contain both a genus (plural genera) and species. For instance, Acer saccharum. is the sugar maple; the genus is Acer and the species is saccharum. Trees within a genus are related and may share physical characteristics. For instance, Acer rubrum. or the red maple is another large maple tree. To maximize sample size, the city has requested you compute the average canopy diameter for each genus. This requires you to write a regular expression to extract the genus.
+
+```{r}
+#Adds 'genus' column
+carolina[,c("genus")] = str_match(carolina$ScientificName, "^([:alpha:]+)[:space:]")[,1]
+carolina
+```
+
+What genus of trees has the largest crown diameter in North and South Carolina? [3 points]
+The genus of trees with the largest average crown diameter is 'Quercus'. The tree with the largest crown diameter on record is a genus 'Platanus' tree. 
+```{r}
+#Genus of trees with the largest average crown diameter
+average = carolina |>
+  group_by(genus) |>
+  summarize(`AvgCdia (m)`= mean(`AvgCdia (m)`)) |>
+  ungroup()
+
+average[order(average$`AvgCdia (m)`, decreasing=TRUE),]  
+```
+
+```{r}
+#Finds the largest crown diameter and its genus 
+carolina[c("genus", "AvgCdia (m)")][order(carolina$"AvgCdia (m)", decreasing=TRUE),]
+```
+
+## Extra credit
+Feel free to do as many or as few extra credit assignments as you like
+
+# Tree age
+Older trees, of course, have larger crowns. Are there differences in the average age of the different genera of trees in the dataset? Might this explain the results of the previous question? [1 point]
+Yes, there are differences in the average age of the different genera of trees. The average age ranges from 13-35. The previous question showed that the average crown size varies by genus, but this can be explained by the fact that these trees also have different ages. Genera with older trees than average will also have larger crowns than average because the crowns will have had more time to grow. 
+
+```{r}
+#Groups carolina data by genus, and finds the mean age of trees within each genus
+genus_age = carolina |>
+  group_by(genus) |>
+  summarize(AGE=mean(Age)) |>
+  ungroup()
+
+genus_age[order(genus_age$AGE, decreasing=TRUE),]  
+```
+
+Recommend a genera that produces a large crown quickly (among trees in North and South Carolina). You can use any analytical methods you want (group by, plots, linear regression, etc.). Document the process by which you chose this type of tree. [2 points]
+To find a genera that produces a large crown quickly, we can look at the growth rate of the crowns, calculated by dividing the crown size by the trees age. When looking at all of the trees, we find that a tree with the 'Juniperus' genus has the highest growth rate. Because that particular tree may have been an outlier, we can calculate the average growth rate for each genus of tree. Doing this, we find that 'Prunus' trees have the highest growth rate on average. Therefore, I would recommend a Prunus tree to produce a large crown quickly. 
+
+```{r}
+#Creates a new column, growth rate 
+#Filters out trees with an age of 0, which are assumed to be errors 
+carolina$growth_rate = carolina$`AvgCdia (m)` / carolina$Age
+carolina = carolina |>
+  filter(Age>0)
+
+#Sorts all data by growth rate
+carolina[order(carolina$growth_rate, decreasing=TRUE),]
+```
+
+```{r}
+#Groups carolina trees by genus and finds average growth rate for each genus
+genus_avg = carolina |>
+  group_by(genus) |>
+  summarize(GROWTH=mean(growth_rate)) |>
+  ungroup()
+
+#Sorts data by decreasing average growth rate per genus
+genus_avg[order(genus_avg$GROWTH, decreasing=TRUE),]  
+```
+
+
+
+# Species
+So far, all of the analysis has focused on genera. Refine your regular expression to also extract the species as well, as a separate column. Within each genus of tree in North and South Carolina, how many species are recorded in the dataset? [2 points]
+
+```{r}
+#Creates a new column for species
+carolina[,c("species")] = str_match(carolina$ScientificName, "^[:alpha:]+[:space:]([:alpha:].+)$")[,2]
+```
+
+```{r}
+#Groups data by genus, and finds the number of unique species recorded for each genus
+genus_species = carolina |> 
+  group_by(genus) |>
+  summarize(SPECIES=length(unique(species))) |>
+  ungroup()
+
+genus_species
+```
+
+```{r}
+#Ensures that all species have been accounted for 
+length(unique(carolina$ScientificName))
+sum(genus_species$SPECIES)
+```
+
+
+Most of the time, scientific names are just Genus species, but some are more complicated. Be sure to account for the following cases, and extract just the species:
+
+Hybrid plants may have an x in between the genus and species.
+For example, for “Platanus x acerifolia” or the London Plane, the genus name is “Platanus” and the species name is “acerifolia”; your regular expression should remove the x
+Some plants may have additional information after the species.
+For instance, “Carpinus betulus ‘Fastigiata’”, the genus is “Carpinus” and the species is “betulus”—Fastigiata is a cultivarLinks to an external site. which your regular expression should remove.
+“Juniperus virginiana var. silicicola”, the genus is “Juniperus” and the species is “virginiana”—Silicolica is a varietyLinks to an external site. which your regular expression should remove.
